@@ -29,8 +29,15 @@ class ArgParser(argparse.ArgumentParser):
 class Constants:
 
     ROOT_PATH = '/home/zhuonan/code/baselines' # Baseline directory path
-    MODEL_NAME = 'FCRN' # Model directory path
+    MODEL_NAME = 'New' # Model directory path
 
+    # Preprocessing setting
+    SAM_MODEL_TYPE = "vit_h"
+    SAM_CKP_PATH = ""
+    
+
+
+    # Folder path setting
     DATA_FOLDER = os.path.join(ROOT_PATH, 'data')
     OUTPUT_FOLDER = os.path.join(ROOT_PATH, MODEL_NAME, 'output')
     LOG_FOLDER = os.path.join(ROOT_PATH, MODEL_NAME, 'log')
