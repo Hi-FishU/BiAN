@@ -70,16 +70,18 @@ class AverageMeter(object):
 
 # Logging out module
 class Model_Logger(logging.Logger):
+
+    _instance = None
+
     def __init__(self, name, level = logging.INFO):
         super(Model_Logger, self).__init__(name, level)
         self.name = name
         self.level = level
-        time_strip = datetime.datetime.now()
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # logging basic settings
 
         fileHandler = LocalFileHandler(
-            filename=os.path.join(Constants.LOG_FOLDER, "{}.log".format(time_strip)),
+            filename=os.path.join(Constants.LOG_FOLDER, "{}.log".format(Constants.LOG_NAME)),
             mode='a')
         fileHandler.setFormatter(formatter)
         fileHandler.setLevel(logging.DEBUG)
@@ -92,6 +94,7 @@ class Model_Logger(logging.Logger):
 
         self.addHandler(fileHandler)
         self.addHandler(streamHandler)
+        self.enable_exception_hook()
         # Add handler
 
     def exception_hook(self, exc_type, exc_value, exc_traceback):
@@ -108,8 +111,5 @@ class LocalFileHandler(logging.FileHandler):
                  delay: bool = False,
                  errors: str | None = None) -> None:
         super().__init__(filename, mode, encoding, delay, errors)
-
-
-
 
 

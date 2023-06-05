@@ -5,7 +5,7 @@ from config import Constants
 from utils import Model_Logger
 import cv2
 
-logger = Model_Logger('sam')
+logger = Model_Logger('SAM')
 
 class InitialMasking(Model_Logger):
     def __init__(self, arg, device):
@@ -28,7 +28,8 @@ class InitialMasking(Model_Logger):
 
         self.predictor.set_image(img)
         mask, _, _ = self.predictor.predict(multimask_output=False)
-        
+        return mask
+
 
 
 
