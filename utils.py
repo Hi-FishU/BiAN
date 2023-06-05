@@ -1,4 +1,4 @@
-import datetime
+import numpy as np
 import torch.nn as nn
 import logging
 import sys
@@ -46,6 +46,12 @@ def layer_maker(cfg, in_channels=1, conv_kernel_size=3, up_kernel_size=3, batch_
             in_channels = v
 
     return nn.Sequential(*layers)
+
+def random_segmentation(size):
+    rand_mask = np.random.normal(0, 1, size)
+    rand_mask[np.where(rand_mask > 0)] = 1
+    rand_mask[np.where(rand_mask < 0)] = 0
+    return rand_mask
 
 class AverageMeter(object):
     def __init__(self) -> None:

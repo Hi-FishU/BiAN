@@ -7,7 +7,7 @@ import random
 import numpy as np
 import json
 import h5py
-from utils import Model_Logger
+from utils import Model_Logger, random_segmentation
 
 
 IMG_EXTENSIONS = ['*.png','*.jpeg', '*.jpg', '*.tif', '*.PNG', '*.JPEG', '*.JPG', '*.TIF']
@@ -98,8 +98,11 @@ class Cell_dataset(data.Dataset):
         dot = cv2.GaussianBlur(dot * self.factor, (5, 5), sigmaX=0)
         img = img.astype(np.int32)
         dot = dot.astype(np.int32)
+        rand_mask = random_segmentation(img.shape)
 
-        return torch.from_numpy(img).float().unsqueeze(0), torch.from_numpy(dot).float().unsqueeze(0), count
+        return torch.from_numpy(img).float().unsqueeze(0), \
+            torch.from_numpy(dot).float().unsqueeze(0), \
+                rand_mask(dot).float().unsqueeze(0), count
 
 
     def load_data(self):
