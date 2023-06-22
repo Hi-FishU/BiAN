@@ -8,6 +8,7 @@ import numpy as np
 import json
 import h5py
 from utils import Model_Logger, random_segmentation
+from torchvision import transforms
 
 
 IMG_EXTENSIONS = ['*.png','*.jpeg', '*.jpg', '*.tif', '*.PNG', '*.JPEG', '*.JPG', '*.TIF']
@@ -51,20 +52,22 @@ def train_val(im_list, ratio=0.9):
 
 # Implement Dataset Class
 class Cell_dataset(data.Dataset):
-    def __init__(self, dataset_dictionary:str,
+    def __init__(self, root:str,
                  type:str, crop_size:tuple | None = None,
-                 resize: int | None = None,
+                 transform: bool = True,
+                 resize:tuple = None,
                  training_factor:int = 100):
 
         if type not in ['h5py', 'image']:
             raise TypeError("{} is not yet supported.".format(type))
 
-        self.root = dataset_dictionary
+        self.root = root
         self.C_size = crop_size
-        self.R_size = resize
+        self.resize = resize
         self.type = type
         self.mode = None
         self.factor = training_factor
+        self.transform = transform
         self.load_data()
 
 
@@ -77,32 +80,27 @@ class Cell_dataset(data.Dataset):
         dot = np.copy(self.dots[index])
         dot = cv2.cvtColor(dot, cv2.COLOR_BGR2GRAY)
 
-        w, h = img.shape
+        if self.resize:
+            resize = transforms.Resize(self.resize)
+            img = resize(img)
 
-        if self.R_size is not None:
-            img_max = max(w, h)
-            ratio = self.R_size / float(img_max)
-            w = int(float(w) * ratio)
-            h = int(float(h) * ratio)
-            img = np.resize(img, (w, h))
-            dot = np.resize(dot, (w, h))
+        if self.transform and self.mode == 'train':
+            transform = transforms.Compose([
+                transforms.RandomCrop(self.C_size),
+                transforms.RandomHorizontalFlip(0.5),
+                transforms.RandomVerticalFlip(0.5),
+                transforms.Normalize((0.1307,), (0.3081,))
+            ])
+            img = transform(img)
 
-        # Switching between Train mode and Validation mode
-        if self.C_size is not None and self.mode == 'train':
-            C_w, C_h = self.C_size
-            i, j, C_w, C_h = random_crop(w, h, C_w, C_h)
-            img = img[j: j + C_h, i: i + C_w]
-            dot = dot[j: j + C_h, i: i + C_w]
         dot[dot != 0] = 1
         count = np.sum(np.copy(dot)).astype(np.int64)
         dot = cv2.GaussianBlur(dot * self.factor, (5, 5), sigmaX=0)
         img = img.astype(np.int32)
         dot = dot.astype(np.int32)
-        rand_mask = random_segmentation(img.shape)
 
         return torch.from_numpy(img).float().unsqueeze(0), \
-            torch.from_numpy(dot).float().unsqueeze(0), \
-                rand_mask(dot).float().unsqueeze(0), count
+            torch.from_numpy(dot).float().unsqueeze(0), count
 
 
     def load_data(self):
@@ -142,4 +140,38 @@ class Cell_dataset(data.Dataset):
 
     def eval(self):
         self.mode = 'eval'
+
+class MNIST_dataset(data.Dataset):
+    def __init__(self, dataset_dictionary:str,
+                 filelist:list[str],
+                 transform:tuple | None = None):
+        self.root = dataset_dictionary
+        self.transform = transform
+        self.filenames = filelist
+        self.load_data()
+
+    def __len__(self):
+        return self.labels.__len__()
+
+    def __getitem__(self, index):
+        img = np.copy(self.imgs[index])
+        label = self.labels[index]
+        if self.transform is not None:
+            img = self.transform(img)
+
+        return img.float(), torch.from_numpy(label).long()
+
+    def load_data(self):
+        self.imgs = []
+        self.labels = []
+        with open(self.filenames, 'r') as f:
+            filelist = f.readlines()
+        img_dir = os.path.basename(self.filenames)
+        for filename in filelist:
+            img_filename, label= filename.split(' ')
+            img = np.asarray(cv2.imread(os.path.join(self.root, img_dir, img_filename)))
+            if self.resize is not None:
+                img = np.resize(img, (self.resize, self.resize))
+            self.imgs.append(img)
+            self.labels.append(np.asarray([int(label)]))
 

@@ -4,7 +4,7 @@ import logging
 import sys
 import os
 from config import Constants
-
+import torchvision.transforms as transforms
 
 
 
@@ -52,6 +52,7 @@ def random_segmentation(size):
     rand_mask[np.where(rand_mask > 0)] = 1
     rand_mask[np.where(rand_mask < 0)] = 0
     return rand_mask
+
 
 class AverageMeter(object):
     def __init__(self) -> None:
@@ -109,6 +110,7 @@ class Model_Logger(logging.Logger):
     def enable_exception_hook(self):
         sys.excepthook = self.exception_hook
         # Set the exception hook
+
 
 class LocalFileHandler(logging.FileHandler):
     def __init__(self, filename: str,
