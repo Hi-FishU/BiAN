@@ -42,4 +42,8 @@ yarn.lock
 package-lock.json
 
 # data
-data/*
+/data
+
+#log
+**.log
+/runs

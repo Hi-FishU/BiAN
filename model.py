@@ -41,7 +41,7 @@ class Deconv2d(nn.Module):
         return x
 
 
-class Linear2d(nn.Modele):
+class Linear2d(nn.Module):
     def __init__(self, in_features, out_features, momentum=0.9, batch_normalize=True):
         super(Linear2d, self).__init__()
         self.linear = nn.Linear(in_features, out_features)
@@ -167,7 +167,7 @@ class FeatureLayer(nn.Module):
 
 
 class RegressionLayer(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, attn=True, bn_training=True, dropout_training=True, layers=4, features_root=32,
+    def __init__(self, out_channels=1, attn=True, bn_training=True, dropout_training=True, layers=4, features_root=32,
                 filter_size=3, pool_size=2, dropout=0.5, momentum=0.9):
         super(RegressionLayer, self).__init__()
         self.layers = layers
@@ -216,7 +216,7 @@ class RegressionLayer(nn.Module):
 
 
 class DiscriminateLayer(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, attn=True, bn_training=True, dropout_training=True, layers=4, features_root=32,
+    def __init__(self, in_size=1, out_channels=2, attn=True, bn_training=True, dropout_training=True, layers=4, features_root=32,
                 filter_size=3, pool_size=2, dropout=0.5, momentum=0.9):
         super(DiscriminateLayer, self).__init__()
         self.layers = layers
@@ -225,28 +225,28 @@ class DiscriminateLayer(nn.Module):
         self.pool_size = pool_size
         self.attn = attn
 
-        self.domain_classifier = nn.Sequential()
-
         features = 2 ** (layers - 1) * features_root
-        depth = 2 ** layers - 1
-
-        self.domain_classifier.add_module('d_fc1', Linear2d(features * depth * depth, features))
-        self.domain_classifier.add_module('d_fc2', Linear2d(features, 64))
-        self.domain_classifier.add_module('d_fc3', Linear2d(64, 2))
+        in_size = in_size // 2 ** (layers - 1)
+        self.domain_classifier = nn.Sequential()
+        self.domain_classifier.add_module('d_fc1', Linear2d(in_size * in_size * features, features, momentum=momentum, batch_normalize=bn_training))
+        self.domain_classifier.add_module('d_fc2', Linear2d(features, 64, momentum=momentum, batch_normalize=bn_training))
+        self.domain_classifier.add_module('d_fc3', Linear2d(64, out_channels, momentum=momentum, batch_normalize=bn_training))
         if dropout_training:
             self.domain_classifier.add_module('d_dropout', nn.Dropout1d(p=dropout))
         self.domain_classifier.add_module('d_softmax', nn.LogSoftmax(dim=1))
 
     def forward(self, x):
+        x = x.view(x.shape[0], -1)
         output = self.domain_classifier(x)
         return output
 
 
 class UDACounting(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, attn=True, bn_training=True,
+    def __init__(self, in_channels=1, out_channels=1, in_size=None, attn=True, bn_training=True,
                  dropout_training=True, layers=4, features_root=32,
                 filter_size=3, pool_size=2, dropout=0.5, momentum=0.9):
         super(UDACounting, self).__init__()
+        assert in_size is not None
         self.domain = 'source'
         self.feature_s = FeatureLayer(in_channels, out_channels, attn,
                                       bn_training, dropout_training, layers,
@@ -254,10 +254,11 @@ class UDACounting(nn.Module):
         self.feature_t = FeatureLayer(in_channels, out_channels, attn,
                                               bn_training, dropout_training, layers,
                                               features_root, filter_size, pool_size, dropout, momentum)
-        self.regression = RegressionLayer(in_channels, out_channels, attn,
-                                      bn_training, dropout_training, layers,
+
+        self.regression = RegressionLayer(out_channels, attn, bn_training, dropout_training, layers,
                                       features_root, filter_size, pool_size, dropout, momentum)
-        self.discriminate = DiscriminateLayer(in_channels, out_channels, attn,
+
+        self.discriminate = DiscriminateLayer(in_size, out_channels, attn,
                                       bn_training, dropout_training, layers,
                                       features_root, filter_size, pool_size, dropout, momentum)
 
@@ -269,11 +270,11 @@ class UDACounting(nn.Module):
 
     def forward(self, x, alpha):
         if self.domain == 'source':
-            feature = self.feature_s(x)
+            feature, stack = self.feature_s(x)
         else:
-            feature = self.feature_t(x)
+            feature, stack = self.feature_t(x)
         reverse_feature = ReverseLayerF.apply(feature, alpha)
-        output = self.regression(feature)
+        output = self.regression(feature, stack)
         domain = self.discriminate(reverse_feature)
         return output, domain
 

@@ -7,7 +7,7 @@ import random
 import numpy as np
 import json
 import h5py
-from utils import Model_Logger, random_segmentation
+from utils import Model_Logger, random_segmentation, _setup_size
 from torchvision import transforms
 
 
@@ -62,8 +62,8 @@ class Cell_dataset(data.Dataset):
             raise TypeError("{} is not yet supported.".format(type))
 
         self.root = root
-        self.C_size = crop_size
-        self.resize = resize
+        self.C_size = _setup_size(resize, 'Error random crop size.')
+        self.resize = _setup_size(resize, 'Error resize size.')
         self.type = type
         self.mode = None
         self.factor = training_factor
@@ -81,26 +81,35 @@ class Cell_dataset(data.Dataset):
         dot = cv2.cvtColor(dot, cv2.COLOR_BGR2GRAY)
 
         if self.resize:
-            resize = transforms.Resize(self.resize)
-            img = resize(img)
+            img = np.resize(img, self.resize)
+            dot = np.resize(dot, self.resize)
 
-        if self.transform and self.mode == 'train':
-            transform = transforms.Compose([
-                transforms.RandomCrop(self.C_size),
-                transforms.RandomHorizontalFlip(0.5),
-                transforms.RandomVerticalFlip(0.5),
-                transforms.Normalize((0.1307,), (0.3081,))
-            ])
-            img = transform(img)
-
+        img = img.astype(np.int32)
         dot[dot != 0] = 1
         count = np.sum(np.copy(dot)).astype(np.int64)
         dot = cv2.GaussianBlur(dot * self.factor, (5, 5), sigmaX=0)
-        img = img.astype(np.int32)
         dot = dot.astype(np.int32)
+        img = torch.from_numpy(img).float()
+        dot = torch.from_numpy(dot).float()
 
-        return torch.from_numpy(img).float().unsqueeze(0), \
-            torch.from_numpy(dot).float().unsqueeze(0), count
+
+
+        if self.transform and self.mode == 'train':
+            global_transform = transforms.Compose([
+                transforms.RandomCrop(self.C_size),
+            ])
+            train_transform = transforms.Compose([
+                transforms.RandomHorizontalFlip(0.5),
+                transforms.RandomVerticalFlip(0.5),
+                # transforms.Normalize((0.1307,), (0.3081,))
+            ])
+            img = global_transform(img)
+            dot = global_transform(dot)
+            img = train_transform(img)
+
+
+
+        return img.unsqueeze(0), dot.unsqueeze(0), count
 
 
     def load_data(self):

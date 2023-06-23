@@ -1,3 +1,4 @@
+import numbers
 import numpy as np
 import torch.nn as nn
 import logging
@@ -5,6 +6,8 @@ import sys
 import os
 from config import Constants
 import torchvision.transforms as transforms
+from collections.abc import Sequence
+
 
 
 
@@ -53,6 +56,18 @@ def random_segmentation(size):
     rand_mask[np.where(rand_mask < 0)] = 0
     return rand_mask
 
+@staticmethod
+def _setup_size(size, error_msg):
+    if isinstance(size, numbers.Number):
+        return int(size), int(size)
+
+    if isinstance(size, Sequence) and len(size) == 1:
+        return size[0], size[0]
+
+    if len(size) != 2:
+        raise ValueError(error_msg)
+
+    return size
 
 class AverageMeter(object):
     def __init__(self) -> None:

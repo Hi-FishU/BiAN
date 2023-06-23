@@ -24,20 +24,20 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('-DP', '--dropout', type=float, default=0.1)
         self.add_argument('-O', '--output', type=str, default='')
 
-        self.add_argument('-DS', '--source-dataset', type=str, default='mbm')
+        self.add_argument('-DS', '--source-dataset', type=str, default='vgg')
         self.add_argument('-DT', '--target-dataset', type=str, default='mbm')
         self.add_argument('-T', '--dataset-type', type=str, default='image')
         self.add_argument('-TR', '--training-ratio', type=float, default=0.7,
                            help="Training data ratio, test ratio set as 0.1")
         self.add_argument('-B', '--batch-size', type=int, default=64)
-        self.add_argument('-S', '--training-scale_s', type=int, default=100,
+        self.add_argument('-SS', '--training-scale_s', type=int, default=100,
                           help="mbm: 1000, dcc: 500,\
                           adi: 100, vgg: 100, 'mbc: 1000")
-        self.add_argument('-S', '--training-scale_t', type=int, default=1000,
+        self.add_argument('-TS', '--training-scale_t', type=int, default=1000,
                           help="mbm: 1000, dcc: 500,\
                           adi: 100, vgg: 100, 'mbc: 1000")
-        self.add_argument('-RS', '--image-resize', type=int, default=28)
-        self.add_argument('-P', '--patch-size', type=tuple, default=(256, 256),
+        self.add_argument('-RS', '--image-resize', type=int, default=96)
+        self.add_argument('-P', '--patch-size', type=tuple, default=256,
                           help="Cropping size of image.")
 
 class Constants:
