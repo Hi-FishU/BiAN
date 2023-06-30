@@ -68,7 +68,8 @@ class ReverseLayerF(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        output = grad_output.neg() * ctx.alpha
+        output = grad_output * ctx.alpha
+        # output = grad_output.neg() * ctx.alpha
 
         return output, None
 
@@ -76,10 +77,13 @@ class ReverseLayerF(Function):
 class SelfAttention(nn.Module):
     def __init__(self, in_channels):
         super(SelfAttention, self).__init__()
-        self.theta = Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        self.phi = Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        self.g = Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.theta = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        # self.theta = Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        # self.phi = Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.phi = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.g = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+
+        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
         self.bn = nn.BatchNorm2d(in_channels)
         self.dropout = nn.Dropout1d()
 
@@ -95,7 +99,7 @@ class SelfAttention(nn.Module):
         t = torch.matmul(self.dropout(theta_phi), g) #V
         t = t.view(batch_num, channel, width, height)
         t = self.conv(t)
-        t = F.relu(self.bn(t))
+        t = self.bn(F.relu(t))
 
         return x + t, theta_phi
 
@@ -230,10 +234,11 @@ class DiscriminateLayer(nn.Module):
         self.domain_classifier = nn.Sequential()
         self.domain_classifier.add_module('d_fc1', Linear2d(in_size * in_size * features, features, momentum=momentum, batch_normalize=bn_training))
         self.domain_classifier.add_module('d_fc2', Linear2d(features, 64, momentum=momentum, batch_normalize=bn_training))
-        self.domain_classifier.add_module('d_fc3', Linear2d(64, out_channels, momentum=momentum, batch_normalize=bn_training))
         if dropout_training:
             self.domain_classifier.add_module('d_dropout', nn.Dropout1d(p=dropout))
-        self.domain_classifier.add_module('d_softmax', nn.LogSoftmax(dim=1))
+        self.domain_classifier.add_module('d_fc3', Linear2d(64, out_channels, momentum=momentum, batch_normalize=bn_training))
+
+        self.domain_classifier.add_module('d_softmax', nn.Softmax(dim=1))
 
     def forward(self, x):
         x = x.view(x.shape[0], -1)
@@ -258,7 +263,7 @@ class UDACounting(nn.Module):
         self.regression = RegressionLayer(out_channels, attn, bn_training, dropout_training, layers,
                                       features_root, filter_size, pool_size, dropout, momentum)
 
-        self.discriminate = DiscriminateLayer(in_size, out_channels, attn,
+        self.discriminate = DiscriminateLayer(in_size, 2, attn,
                                       bn_training, dropout_training, layers,
                                       features_root, filter_size, pool_size, dropout, momentum)
 
@@ -273,9 +278,9 @@ class UDACounting(nn.Module):
             feature, stack = self.feature_s(x)
         else:
             feature, stack = self.feature_t(x)
-        reverse_feature = ReverseLayerF.apply(feature, alpha)
+        # reverse_feature = ReverseLayerF.apply(feature, alpha)
         output = self.regression(feature, stack)
-        domain = self.discriminate(reverse_feature)
+        domain = self.discriminate(feature)
         return output, domain
 
 

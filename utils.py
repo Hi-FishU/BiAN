@@ -1,14 +1,18 @@
-import numbers
-import numpy as np
-import torch.nn as nn
+import json
 import logging
-import sys
+import numbers
 import os
-from config import Constants
-import torchvision.transforms as transforms
+import random
+import sys
 from collections.abc import Sequence
+from glob import glob
 
+import numpy as np
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
 
+from config import Constants
 
 
 def layer_maker(cfg, in_channels=1, conv_kernel_size=3, up_kernel_size=3, batch_norm=False, dilation=1):
@@ -56,6 +60,46 @@ def random_segmentation(size):
     rand_mask[np.where(rand_mask < 0)] = 0
     return rand_mask
 
+
+class RandomRotation90(transforms.RandomRotation):
+    def get_params(self, img):
+        # Choose a random rotation angle in multiples of 90 degrees
+        angle = random.randint(0, 3) * 90
+
+        # Return the rotation angle as a tuple
+        return angle
+
+def random_crop(img_size, crop_size):
+    img_height = img_size[0]
+    img_width = img_size[1]
+    crop_height = crop_size[0]
+    crop_width = crop_size[1]
+    res_height = img_height - crop_height
+    res_width = img_width - crop_width
+    i = random.randint(0, res_height)
+    j = random.randint(0, res_width)
+    return i, j, crop_height, crop_width
+
+def get_image_filename_list(root) -> list:
+
+    if os.path.exists(root) is not True:
+        raise FileNotFoundError("{} does not exist.".format(root))
+
+    img_dir = os.path.join(root, "raw")
+    dot_dir = os.path.join(root, "dot")
+    if os.path.exists(img_dir) is not True or os.path.exists(dot_dir) is not True:
+        raise Exception("Unknown dataset structure {}".format(root))
+    # Validate the file structure
+    try:
+        json_file = os.path.join(root, glob("*.json", root_dir=root)[0])
+    except Exception:
+        raise FileNotFoundError("Cannot find json file of filenames in {}".format(root))
+
+    with open(json_file, 'r') as f:
+        image_file_list = json.load(f)
+
+    return image_file_list
+
 @staticmethod
 def _setup_size(size, error_msg):
     if isinstance(size, numbers.Number):
@@ -78,15 +122,17 @@ class AverageMeter(object):
         self.avg = 0.0
         self.sum = 0.0
         self.count = 0
+        self.min = 1e+4
 
     def update(self, value, n = 1):
         self.val = value
         self.sum += value * n
         self.count += n
         self.avg = self.sum / self.count
+        self.min = min(self.min, value)
 
     def get(self, key):
-        result = {'sum': self.sum, 'count': self.count, 'avg': self.avg}
+        result = {'sum': self.sum, 'count': self.count, 'avg': self.avg, 'min': self.min}
         return result[key]
 
 
@@ -104,7 +150,7 @@ class Model_Logger(logging.Logger):
 
         fileHandler = LocalFileHandler(
             filename=os.path.join(Constants.LOG_FOLDER, "{}.log".format(Constants.LOG_NAME)),
-            mode='a')
+            mode='a+')
         fileHandler.setFormatter(formatter)
         fileHandler.setLevel(logging.DEBUG)
         # File handler
