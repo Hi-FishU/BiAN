@@ -102,6 +102,9 @@ def get_image_filename_list(root) -> list:
 
 @staticmethod
 def _setup_size(size, error_msg):
+    if size is None:
+        return None
+
     if isinstance(size, numbers.Number):
         return int(size), int(size)
 

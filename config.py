@@ -7,13 +7,14 @@ import os
 class ArgParser(argparse.ArgumentParser):
 
     def load_arguments(self):
-        self.add_argument('-T', '--title', type=str, default='Exp without separated infill.',)
+        self.add_argument('-T', '--tag', type=str, default='Normal exp P/N',)
 
         self.add_argument('-L', '--learning-rate', type=float, default=1e-3)
-        self.add_argument('-E', '--epoch', type=int, default=800)
+        self.add_argument('-E', '--epoch', type=int, default=100)
         self.add_argument('-N', '--device', type=str, default='0')
 
-        self.add_argument('-LD','--lr-decay', type=int, default=0.1)
+        self.add_argument('-LD','--lr-decay', type=float, default=0.001)
+        self.add_argument('-LDS', '--lr-decay-size', type=int, default=50)
         # self.add_argument('-M', '--momentum', type=float, default=0.9,
         #                   help='Momentum value for SGD optimizer.')
         self.add_argument('-WD', '--weight-decay', type=float, default=1e-3,
@@ -33,16 +34,16 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('-TR', '--training-ratio', type=float, default=0.5,
                            help="Training data ratio, test ratio set as 0.1")
         self.add_argument('-B', '--batch-size', type=int, default=64)
-        self.add_argument('-TSS', '--training-scale_s', type=int, default=100,
+        self.add_argument('-TSS', '--training-scale-s', type=int, default=100,
                           help="mbm: 1000, dcc: 500,\
                           adi: 100, vgg: 100, 'mbc: 1000")
-        self.add_argument('-TST', '--training-scale_t', type=int, default=100,
+        self.add_argument('-TST', '--training-scale-t', type=int, default=100,
                           help="mbm: 1000, dcc: 500,\
                           adi: 100, vgg: 100, 'mbc: 1000")
-        self.add_argument('-RS', '--image-resize', type=int, default=96)
-        self.add_argument('-P', '--patch-size', type=tuple, default=64,
+        self.add_argument('-RS', '--image-resize', type=int, default=None)
+        self.add_argument('-P', '--patch-size', type=tuple, default=96,
                           help="Cropping size of image.")
-        self.add_argument('-WS', '--warm-start', type=int, default=150,
+        self.add_argument('-WS', '--warm-start', type=int, default=0,
                           help="Epochs only train regressor on source domain.")
 
 class Constants:

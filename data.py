@@ -51,30 +51,26 @@ class Cell_dataset(data.Dataset):
             dot = np.expand_dims(dot, -1)
         if dot.shape[-1] != 1:
             dot = cv2.cvtColor(dot, cv2.COLOR_BGR2GRAY)
-
+        dot = dot.squeeze(-1)
         if self.resize:
             img = np.resize(img, self.resize)
             dot = np.resize(dot, self.resize)
-        count = np.copy(dot)
-        # count[count != 0] = 1
-        count = np.sum(count).astype(np.int64)
-        dot = dot * self.factor
         # dot = cv2.GaussianBlur(dot, (5, 5), sigmaX=0)
-        img = img.astype(np.int32)
-        dot = dot.astype(np.int32)
-        img = torch.from_numpy(img).float()
-        dot = torch.from_numpy(dot).float()
+        img = img.astype(np.float32)
+        dot = dot.astype(np.float32)
+        img = torch.Tensor(img)
+        dot = torch.Tensor(dot)
 
         if self.transform and self.mode == 'train':
             img_dot = torch.concat(
-                [img.unsqueeze(-1), dot.unsqueeze(-1)], dim=-1)
+                [img.unsqueeze(-1), dot.unsqueeze(-1)], dim=-1).permute(2, 0, 1)
 
             transform = transforms.Compose([
                 transforms.RandomHorizontalFlip(0.5),
                 transforms.RandomVerticalFlip(0.5),
                 RandomRotation90(90),
             ])
-            img_dot = transform(img_dot)
+            img_dot = transform(img_dot).permute(1, 2, 0)
             img = img_dot[:, :, 0]
             dot = img_dot[:, :, 1]
 
@@ -84,7 +80,10 @@ class Cell_dataset(data.Dataset):
             img = transforms.functional.crop(img, i, j, height, width)
             dot = transforms.functional.crop(dot, i, j, height, width)
 
-        return img.unsqueeze(0), dot.unsqueeze(0), count
+
+        # count = torch.sum(dot).int()
+        # dot = dot * self.factor
+        return img.unsqueeze(0), dot.unsqueeze(0)
 
     def load_data(self):
         if self.type == 'h5py':
