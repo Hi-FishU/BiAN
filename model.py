@@ -391,6 +391,6 @@ class UDACounting(nn.Module):
         else:
             feature, stack = self.feature_t(x)
         output = self.regression(feature, stack)
-        feature = ReverseLayerF.apply(feature, alpha)
+        # feature = ReverseLayerF.apply(feature, alpha)
         domain = self.discriminate(feature)
         return output, domain

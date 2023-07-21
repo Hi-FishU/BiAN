@@ -19,22 +19,26 @@ logger = Model_Logger('data')
 
 
 # Implement Dataset Class
-class Cell_dataset(data.Dataset):
+class Counting_dataset(data.Dataset):
     def __init__(self,
                  root: str,
-                 type: str,
+                 input_type: str,
                  crop_size: tuple | None = None,
                  transform: bool = True,
                  resize: tuple = None,
-                 training_factor: int = 100):
+                 training_factor: int = 100,
+                 memory_saving: bool = False):
 
-        if type not in ['h5py', 'image']:
-            raise TypeError("{} is not yet supported.".format(type))
-
+        if input_type not in ['h5py', 'image']:
+            raise TypeError("{} is not yet supported.".format(input_type))
+        if input_type is 'h5py' and memory_saving is True:
+            logger.warn("When memory saving mode is not available for H5 type dataset. Set as False.")
+            memory_saving = False
         self.root = root
+        self.memory_saving = memory_saving
         self.C_size = _setup_size(crop_size, 'Error random crop size.')
         self.resize = _setup_size(resize, 'Error resize size.')
-        self.type = type
+        self.type = input_type
         self.mode = None
         self.factor = training_factor
         self.transform = transform
@@ -44,14 +48,16 @@ class Cell_dataset(data.Dataset):
         return len(self.imgs)
 
     def __getitem__(self, index):
-        img = np.copy(self.imgs[index])
+        if self.memory_saving:
+            img = np.array(cv2.imread(self.imgs[index]))
+            dot = np.array(cv2.imread(self.dots[index]))
+        else:
+            img = np.copy(self.imgs[index])
+            dot = np.copy(self.dots[index])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        dot = np.copy(self.dots[index])
-        if len(dot.shape) < 3:
-            dot = np.expand_dims(dot, -1)
-        if dot.shape[-1] != 1:
+        if len(dot.shape) == 3:
             dot = cv2.cvtColor(dot, cv2.COLOR_BGR2GRAY)
-        dot = dot.squeeze(-1)
+            # dot = dot.squeeze(-1)
         if self.resize:
             img = np.resize(img, self.resize)
             dot = np.resize(dot, self.resize)
@@ -76,9 +82,15 @@ class Cell_dataset(data.Dataset):
 
         # Random cropping
         if self.C_size:
-            i, j, height, width = random_crop(img.shape, self.C_size)
-            img = transforms.functional.crop(img, i, j, height, width)
-            dot = transforms.functional.crop(dot, i, j, height, width)
+            if self.mode == 'train' and min(img.shape) >= self.C_size[0]:
+                i, j, height, width = random_crop(img.shape, self.C_size)
+                img = transforms.functional.crop(img, i, j, height, width)
+                dot = transforms.functional.crop(dot, i, j, height, width)
+            else:
+                img = transforms.functional.resize(img.unsqueeze(0), self.C_size, antialias=True).squeeze(0)
+                dot = transforms.functional.resize(dot.unsqueeze(0), self.C_size, antialias=True).squeeze(0)
+
+
 
 
         # count = torch.sum(dot).int()
@@ -122,8 +134,12 @@ class Cell_dataset(data.Dataset):
                         "Could not find the annotations file {}. Skipping this file"
                         .format(dot_filename))
                     continue
-                imgs.append(np.asarray(cv2.imread(raw_filename)))
-                dots.append(np.asarray(cv2.imread(dot_filename)))
+                if self.memory_saving:
+                    imgs.append(raw_filename)
+                    dots.append(dot_filename)
+                else:
+                    imgs.append(np.asarray(cv2.imread(raw_filename)))
+                    dots.append(np.asarray(cv2.imread(dot_filename)))
             self.imgs = imgs
             self.dots = dots
 
@@ -132,7 +148,6 @@ class Cell_dataset(data.Dataset):
 
     def eval(self):
         self.mode = 'eval'
-
 
 class MNIST_dataset(data.Dataset):
     def __init__(self,

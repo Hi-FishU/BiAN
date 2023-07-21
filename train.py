@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
 from utils import AverageMeter, Model_Logger
 
-from data import Cell_dataset
+from data import Counting_dataset
 
 logger = Model_Logger('train')
 logger.enable_exception_hook()
@@ -43,37 +43,49 @@ def train(args):
 # Data loading and splitting
     logger.info("Start loading data.")
 
-    source_dataset = Cell_dataset(root=os.path.join(
+    source_dataset = Counting_dataset(root=os.path.join(
         Constants.DATA_FOLDER, Constants.DATASET[args.source_dataset]),
-                                  type=args.source_dataset_type,
-                                  transform=False,
-                                  crop_size=args.patch_size,
-                                  resize=args.image_resize,
-                                  training_factor=args.training_scale_s)
-    target_dataset = Cell_dataset(root=os.path.join(
+                                      input_type=args.source_dataset_type,
+                                      transform=False,
+                                      crop_size=args.patch_size,
+                                      resize=args.image_resize,
+                                      training_factor=args.training_scale_s,
+                                      memory_saving=args.memory_saving)
+    target_dataset = Counting_dataset(root=os.path.join(
         Constants.DATA_FOLDER, Constants.DATASET[args.target_dataset]),
-                                  type=args.target_dataset_type,
-                                  transform=False,
-                                  crop_size=args.patch_size,
-                                  resize=args.image_resize,
-                                  training_factor=args.training_scale_t)
-    target_dataset_train, target_dataset_valid = random_split(
-        target_dataset, [args.training_ratio, 1 - args.training_ratio])
+                                      input_type=args.target_dataset_type,
+                                      transform=False,
+                                      crop_size=args.patch_size,
+                                      resize=args.image_resize,
+                                      training_factor=args.training_scale_t,
+                                      memory_saving=args.memory_saving)
+    target_dataset_train, target_dataset_valid, target_dataset_test = random_split(
+        target_dataset,
+        [args.training_ratio, 1 - args.training_ratio - 0.1, 0.1])
     source_dataset.train()
     target_dataset_train.dataset.train()
     target_dataset_valid.dataset.eval()
+    target_dataset_test.dataset.eval()
     source_dataloader = DataLoader(source_dataset,
                                    batch_size=args.batch_size,
                                    shuffle=True,
-                                   drop_last=True)
+                                   drop_last=True,
+                                   num_workers=4)
     target_dataloader_train = DataLoader(target_dataset_train,
                                          batch_size=args.batch_size,
                                          shuffle=True,
-                                         drop_last=True)
+                                         drop_last=True,
+                                         num_workers=4)
     target_dataloader_valid = DataLoader(target_dataset_valid,
                                          batch_size=args.batch_size,
                                          shuffle=True,
-                                         drop_last=True)
+                                         drop_last=True,
+                                         num_workers=4)
+    target_dataloader_test = DataLoader(target_dataset_test,
+                                        batch_size=args.batch_size,
+                                        shuffle=True,
+                                        drop_last=True,
+                                        num_workers=4)
 
     logger.info(
         "Loading data completed. Elapsed time: {:.2f}sec.".format(time.time() -
@@ -97,7 +109,9 @@ def train(args):
     #                                         T_0=args.restart_step,
     #                                         T_mult=4,
     #                                         eta_min=1e-10)
-    scheduler = StepLR(optimizer, step_size=args.lr_decay_size, gamma=args.lr_decay)
+    scheduler = StepLR(optimizer,
+                       step_size=args.lr_decay_size,
+                       gamma=args.lr_decay)
 
     # Distinguish voxel-wise loss and count loss
     loss_voxel = torch.nn.MSELoss(reduction='mean')
@@ -105,6 +119,7 @@ def train(args):
     loss_voxel = loss_voxel.to(device)
     loss_domain = loss_domain.to(device)
     count_mae = torch.nn.L1Loss(reduction='mean')
+    loss_uncertain = torch.nn.MSELoss(reduction='mean')
 
     logger.info("Initialization Completed. Elapsed time: {:.2f}sec".format(
         time.time() - start_time))
@@ -117,6 +132,7 @@ def train(args):
         epoch_voxel_loss = AverageMeter()
         epoch_count_loss = AverageMeter()
         epoch_dis_loss = AverageMeter()
+        epoch_uncertainty = AverageMeter()
         valid_voxel_loss = AverageMeter()
         valid_count_loss = AverageMeter()
         model.train()
@@ -153,8 +169,6 @@ def train(args):
                 # Train on source domain
                 model.source()
                 output_s, domain_output_s = model(img_s, alpha)
-                # loss_s_voxel.backward()
-                # optimizer.step()
                 counts_pred_s = output_s.sum(
                     [1, 2, 3]).detach().cpu() / args.training_scale_s
                 loss_s_count = count_mae(counts_pred_s, counts_s)
@@ -166,26 +180,27 @@ def train(args):
                 mask[torch.where(mask > 0)] = 1
                 bg_s = torch.zeros_like(mask, device=device)
                 output_positive, domain_output_s_T = model(img_s * mask, alpha)
-                output_negative, domain_output_s_F = model(img_s * (1. - mask), alpha)
+                output_negative, domain_output_s_F = model(
+                    img_s * (1. - mask), alpha)
                 output_s, _ = model(img_s, alpha)
-                loss_s_voxel_t = loss_voxel(output_positive, dot_s)
-                loss_s_voxel_f = loss_voxel(output_negative, bg_s)
+                loss_s_voxel_P = loss_voxel(output_positive, dot_s)
+                loss_s_voxel_N = loss_voxel(output_negative, bg_s)
                 loss_s_voxel = loss_voxel(output_s, dot_s)
-                loss_s_voxel_separated = loss_s_voxel_t + loss_s_voxel_f + loss_s_voxel
-                loss_s_domain_T = loss_domain(domain_output_s_T,
+                loss_s_voxel_separated = loss_s_voxel_P + loss_s_voxel_N + loss_s_voxel
+                loss_s_domain_P = loss_domain(domain_output_s_T,
                                               source_domain_label)
-                loss_s_domain_F = loss_domain(domain_output_s_F,
+                loss_s_domain_N = loss_domain(domain_output_s_F,
                                               source_domain_label)
 
                 # Compute the loss of source domain
                 loss_s = (loss_s_voxel_separated) / (
-                    loss_s_domain_T + loss_s_domain_F + loss_s_domain)
+                    loss_s_domain_P + loss_s_domain_N + loss_s_domain)
                 # loss_s = loss_s_voxel / loss_s_domain
 
                 # Train on target domain
                 model.target()
                 output_t, domain_output_t = model(img_t, alpha)
-                loss_t_voxel = loss_voxel(output_t, dot_t)
+                loss_t_voxel = loss_voxel(output_t.detach(), dot_t)
                 counts_pred_t = output_t.sum(
                     [1, 2, 3]).detach().cpu() / args.training_scale_t
                 loss_t_count = count_mae(counts_pred_t, counts_t)
@@ -196,21 +211,24 @@ def train(args):
                 mask = output_t.detach()
                 bg_t = torch.zeros_like(mask, device=device)
                 mask[torch.where(mask > 0)] = 1
-                _, domain_output_t_T = model(img_t * mask, alpha)
-                output_t_f, domain_output_t_F = model(img_t * (1. - mask),
+                output_t_P, domain_output_t_T = model(img_t * mask, alpha)
+                output_t_N, domain_output_t_F = model(img_t * (1. - mask),
                                                       alpha)
-                loss_t_voxel_f = loss_voxel(output_t_f, bg_t)
-                loss_t_domain_T = loss_domain(domain_output_t_T,
+                output_t, _ = model(img_t, alpha)
+                loss_t_voxel_N = loss_voxel(output_t_N, bg_t)
+                loss_t_domain_P = loss_domain(domain_output_t_T,
                                               target_domain_label)
-                loss_t_domain_F = loss_domain(domain_output_t_F,
+                loss_t_domain_N = loss_domain(domain_output_t_F,
                                               target_domain_label)
-                loss_t = loss_t_voxel_f / (loss_t_domain_T + loss_t_domain_F +
-                                           loss_t_domain)
+                loss_t_uncertain = loss_uncertain((output_t_P + output_t_N),
+                                                  output_t)
+                loss_t = (loss_t_voxel_N) / (loss_t_domain_P +
+                                             loss_t_domain_N + loss_t_domain)
                 # loss_t = 1 / loss_t_domain
                 if epoch < args.warm_start:
                     loss = loss_s_voxel
                 else:
-                    loss = loss_s + loss_t
+                    loss = loss_s + loss_t + loss_t_uncertain
                     loss = loss.neg()
                     optimizer.zero_grad()
                     loss.backward()
@@ -222,12 +240,13 @@ def train(args):
             # Update the loss meter
             epoch_voxel_loss.update(loss_s_voxel_separated.item())
             epoch_count_loss.update(loss_s_count.item())
-            epoch_dis_loss.update(loss_s_domain_T.item() +
-                                  loss_s_domain_F.item())
+            epoch_dis_loss.update(loss_s_domain_P.item() +
+                                  loss_s_domain_N.item())
             epoch_voxel_loss.update(loss_t_voxel.item())
             epoch_count_loss.update(loss_t_count.item())
-            epoch_dis_loss.update(loss_t_domain_T.item() +
-                                  loss_t_domain_F.item())
+            epoch_dis_loss.update(loss_t_domain_P.item() +
+                                  loss_t_domain_N.item())
+            epoch_uncertainty.update(loss_t_uncertain.item())
 
             # Logging in Tensorboard
             if batch_idx % 100 == 0:
@@ -266,6 +285,7 @@ def train(args):
                            tag_scalar_dict={
                                'Train pixel loss': epoch_voxel_loss.get('avg'),
                                'Distinguish Loss': epoch_dis_loss.get('avg'),
+                               'Uncertainty': epoch_uncertainty.get('avg'),
                                'Valid pixel loss': valid_voxel_loss.get('avg'),
                            },
                            global_step=epoch)
@@ -282,6 +302,7 @@ def train(args):
                     MAE: {:.2f}, \
                     \nValid\
                     Loss: {:.2f}, \
+                    Unce: {:.2f}, \
                     MAE: {:.2f}, \
                     ".format(epoch + 1,
                              time.time() - epoch_time,
@@ -289,20 +310,53 @@ def train(args):
                              epoch_dis_loss.get('avg'),
                              epoch_count_loss.get('avg'),
                              valid_voxel_loss.get('avg'),
+                             epoch_uncertainty.get('avg'),
                              valid_count_loss.get('avg')))
         voxel_MSE.update(valid_voxel_loss.get('avg'))
         count_MAE.update(valid_count_loss.get('avg'))
     logger.info("Training completed ({:.2f} sec)".format(time.time() -
                                                          train_time))
+
+    #Test
+    test_start = time.time()
+    model.eval()
+    model.target()
+    test_MAE = AverageMeter()
+    test_voxel_MSE = AverageMeter()
+    for batch_idx, target_data in enumerate(target_dataloader_valid):
+        img_t, dot_t = target_data
+
+        counts_t = torch.sum(dot_t, (2, 3)).int().squeeze(-1)
+        dot_t = dot_t * args.training_scale_t
+
+        with torch.no_grad():
+            img_t = img_t.to(device)
+            dot_t = dot_t.to(device)
+            alpha = 0
+            output, _ = model(img_t, alpha)
+            loss = loss_voxel(output, dot_t)
+            counts_pred = output.sum([1, 2, 3
+                                      ]).detach().cpu() / args.training_scale_t
+            loss_count = count_mae(counts_pred, counts_t)
+
+        # Update the loss meter
+        test_voxel_MSE.update(loss.item())
+        test_MAE.update(loss_count.item())
+    test_time = time.time() - test_start
     writer.close()
     model.source()
-    model_stats_s = summary(model, input_data=[img_t, alpha], verbose=0)
+    model_stats_s = summary(model, input_data=[img_s, alpha], verbose=0)
     model.target()
     model_stats_t = summary(model, input_data=[img_t, alpha], verbose=0)
     logger.info("Source Model Summary:\n{}".format(str(model_stats_s)))
     logger.info("Target Model Summary:\n{}".format(str(model_stats_t)))
     logger.info("The best count MAE: {:.2f}".format(count_MAE.get('min')))
     logger.info("The best voxel loss: {:.2f}".format(voxel_MSE.get('min')))
+    logger.info("Test: Cost: {:.1f} sec\n\
+                \tLoss: {:.2f}, \
+                MAE: {:.2f}, \
+                ".format(test_time, test_voxel_MSE.get('avg'),
+                         test_MAE.get('avg')))
     logger.info("Finished.")
 
 if __name__ == '__main__':
