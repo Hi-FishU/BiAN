@@ -32,7 +32,9 @@ class Counting_dataset(data.Dataset):
         if input_type not in ['h5py', 'image']:
             raise TypeError("{} is not yet supported.".format(input_type))
         if input_type is 'h5py' and memory_saving is True:
-            logger.warn("When memory saving mode is not available for H5 type dataset. Set as False.")
+            logger.warn(
+                "When memory saving mode is not available for H5 type dataset. Set as False."
+            )
             memory_saving = False
         self.root = root
         self.memory_saving = memory_saving
@@ -58,9 +60,9 @@ class Counting_dataset(data.Dataset):
         if len(dot.shape) == 3:
             dot = cv2.cvtColor(dot, cv2.COLOR_BGR2GRAY)
             # dot = dot.squeeze(-1)
-        if self.resize:
-            img = np.resize(img, self.resize)
-            dot = np.resize(dot, self.resize)
+        # if self.resize:
+        #     img = np.resize(img, self.resize)
+        #     dot = np.resize(dot, self.resize)
         # dot = cv2.GaussianBlur(dot, (5, 5), sigmaX=0)
         img = img.astype(np.float32)
         dot = dot.astype(np.float32)
@@ -69,7 +71,8 @@ class Counting_dataset(data.Dataset):
 
         if self.transform and self.mode == 'train':
             img_dot = torch.concat(
-                [img.unsqueeze(-1), dot.unsqueeze(-1)], dim=-1).permute(2, 0, 1)
+                [img.unsqueeze(-1), dot.unsqueeze(-1)],
+                dim=-1).permute(2, 0, 1)
 
             transform = transforms.Compose([
                 transforms.RandomHorizontalFlip(0.5),
@@ -87,14 +90,13 @@ class Counting_dataset(data.Dataset):
                 img = transforms.functional.crop(img, i, j, height, width)
                 dot = transforms.functional.crop(dot, i, j, height, width)
             else:
-                img = transforms.functional.resize(img.unsqueeze(0), self.C_size, antialias=True).squeeze(0)
-                dot = transforms.functional.resize(dot.unsqueeze(0), self.C_size, antialias=True).squeeze(0)
+                img = transforms.functional.resize(img.unsqueeze(0),
+                                                   self.C_size,
+                                                   antialias=True).squeeze(0)
+                dot = transforms.functional.resize(dot.unsqueeze(0),
+                                                   self.C_size,
+                                                   antialias=True).squeeze(0)
 
-
-
-
-        # count = torch.sum(dot).int()
-        # dot = dot * self.factor
         return img.unsqueeze(0), dot.unsqueeze(0)
 
     def load_data(self):
@@ -148,6 +150,7 @@ class Counting_dataset(data.Dataset):
 
     def eval(self):
         self.mode = 'eval'
+
 
 class MNIST_dataset(data.Dataset):
     def __init__(self,

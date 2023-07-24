@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from glob import glob
 
 import numpy as np
+import cv2
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -116,6 +117,20 @@ def _setup_size(size, error_msg):
 
     return size
 
+@staticmethod
+def batch_extract(root, imgs, preds):
+    try:
+        os.mkdir(root)
+    except FileExistsError:
+        pass
+
+    for id, (img, pred) in enumerate(zip(imgs, preds)):
+        pred = pred.int()
+        merge = (img + pred) / 2
+        finalimg = torch.concat([img, pred, merge], dim = 1).permute(1, 2, 0).numpy()
+        cv2.imwrite(os.path.join(root, str(id) + ".png"), finalimg)
+
+
 class AverageMeter(object):
     def __init__(self) -> None:
         self.reset()
@@ -183,5 +198,7 @@ class LocalFileHandler(logging.FileHandler):
                  delay: bool = False,
                  errors: str | None = None) -> None:
         super().__init__(filename, mode, encoding, delay, errors)
+
+
 
 
