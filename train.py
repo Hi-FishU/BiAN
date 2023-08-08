@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, StepLR
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
-from utils import AverageMeter, Model_Logger
+from utils import AverageMeter, Model_Logger, batch_extract
 
 from data import Counting_dataset
 
@@ -220,8 +220,8 @@ def train(args):
                                               target_domain_label)
                 loss_t_domain_N = loss_domain(domain_output_t_F,
                                               target_domain_label)
-                loss_t_uncertain = loss_uncertain((output_t_P + output_t_N),
-                                                  output_t)
+                loss_t_uncertain = loss_uncertain(output_t,
+                                                  (output_t_P + output_t_N))
                 loss_t = (loss_t_voxel_N) / (loss_t_domain_P +
                                              loss_t_domain_N + loss_t_domain)
                 # loss_t = 1 / loss_t_domain
@@ -323,7 +323,7 @@ def train(args):
     model.target()
     test_MAE = AverageMeter()
     test_voxel_MSE = AverageMeter()
-    for batch_idx, target_data in enumerate(target_dataloader_valid):
+    for batch_idx, target_data in enumerate(target_dataloader_test):
         img_t, dot_t = target_data
 
         counts_t = torch.sum(dot_t, (2, 3)).int().squeeze(-1)
@@ -338,6 +338,8 @@ def train(args):
             counts_pred = output.sum([1, 2, 3
                                       ]).detach().cpu() / args.training_scale_t
             loss_count = count_mae(counts_pred, counts_t)
+
+        batch_extract(os.path.join(args.output, str(Constants.LOG_NAME)), img_t.detach().cpu(), dot_t.cpu())
 
         # Update the loss meter
         test_voxel_MSE.update(loss.item())

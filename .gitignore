@@ -47,3 +47,6 @@ package-lock.json
 #log
 **.log
 /runs
+
+# sample
+outputs/
