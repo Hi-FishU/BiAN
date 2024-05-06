@@ -118,17 +118,25 @@ def _setup_size(size, error_msg):
     return size
 
 @staticmethod
-def batch_extract(root, imgs, preds):
+def batch_extract(root, batch, imgs, preds, labels, origins):
     try:
         os.mkdir(root)
     except FileExistsError:
         pass
 
-    for id, (img, pred) in enumerate(zip(imgs, preds)):
-        pred = pred.int()
+    for id, (img, pred, label, origin) in enumerate(zip(imgs, preds, labels, origins)):
+        pred = pred.int() * 1000
+        # pred = transforms.functional.resize(img.unsqueeze(0),
+        #                                     label.shape,
+        #                                     antialias=True).squeeze(0)
+        # pred = cv2.GaussianBlur(pred.numpy(), (10, 10), sigmaX=0)
+        # pred = torch.from_numpy(pred)
         merge = (img + pred) / 2
-        finalimg = torch.concat([img, pred, merge], dim = 1).permute(1, 2, 0).numpy()
-        cv2.imwrite(os.path.join(root, str(id) + ".png"), finalimg)
+        finalimg = torch.concat([img, pred, merge, label], dim = 1).permute(1, 2, 0).numpy()
+        cv2.imwrite(os.path.join(root, str(id) +
+                    str(batch) + ".png"), finalimg)
+        cv2.imwrite(os.path.join(root,  str(
+            id) + str(batch)+ "_original.png"), origin.numpy())
 
 
 class AverageMeter(object):

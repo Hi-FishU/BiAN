@@ -31,7 +31,7 @@ class Counting_dataset(data.Dataset):
 
         if input_type not in ['h5py', 'image']:
             raise TypeError("{} is not yet supported.".format(input_type))
-        if input_type is 'h5py' and memory_saving is True:
+        if input_type == 'h5py' and memory_saving:
             logger.warn(
                 "When memory saving mode is not available for H5 type dataset. Set as False."
             )
@@ -39,7 +39,7 @@ class Counting_dataset(data.Dataset):
         self.root = root
         self.memory_saving = memory_saving
         self.C_size = _setup_size(crop_size, 'Error random crop size.')
-        self.resize = _setup_size(resize, 'Error resize size.')
+        self.R_size = _setup_size(resize, 'Error resize size.')
         self.type = input_type
         self.mode = None
         self.factor = training_factor
@@ -56,10 +56,15 @@ class Counting_dataset(data.Dataset):
         else:
             img = np.copy(self.imgs[index])
             dot = np.copy(self.dots[index])
+        origin_img = torch.Tensor(img)
+        origin_dot = torch.Tensor(dot)
+
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         if len(dot.shape) == 3:
             dot = cv2.cvtColor(dot, cv2.COLOR_BGR2GRAY)
             # dot = dot.squeeze(-1)
+
+
         # if self.resize:
         #     img = np.resize(img, self.resize)
         #     dot = np.resize(dot, self.resize)
@@ -68,6 +73,7 @@ class Counting_dataset(data.Dataset):
         dot = dot.astype(np.float32)
         img = torch.Tensor(img)
         dot = torch.Tensor(dot)
+        count = torch.sum(dot).int().squeeze(-1)
 
         if self.transform and self.mode == 'train':
             img_dot = torch.concat(
@@ -84,7 +90,7 @@ class Counting_dataset(data.Dataset):
             dot = img_dot[:, :, 1]
 
         # Random cropping
-        if self.C_size:
+        if self.C_size and img is not None:
             if self.mode == 'train' and min(img.shape) >= self.C_size[0]:
                 i, j, height, width = random_crop(img.shape, self.C_size)
                 img = transforms.functional.crop(img, i, j, height, width)
@@ -96,8 +102,11 @@ class Counting_dataset(data.Dataset):
                 dot = transforms.functional.resize(dot.unsqueeze(0),
                                                    self.C_size,
                                                    antialias=True).squeeze(0)
+        else:
+            img = None
+            dot = None
 
-        return img.unsqueeze(0), dot.unsqueeze(0)
+        return img.unsqueeze(0), dot.unsqueeze(0), origin_img, origin_dot, count
 
     def load_data(self):
         if self.type == 'h5py':
@@ -128,7 +137,7 @@ class Counting_dataset(data.Dataset):
                 raw_filename = os.path.join(self.root, 'raw', raw_filename)
                 if os.path.exists(raw_filename) is not True:
                     logger.warning(
-                        "Could not find the annotations file {}. Skipping this file"
+                        "Could not find the raw file {}. Skipping this file"
                         .format(raw_filename))
                     continue
                 if os.path.exists(dot_filename) is not True:
@@ -150,6 +159,9 @@ class Counting_dataset(data.Dataset):
 
     def eval(self):
         self.mode = 'eval'
+
+    def test(self):
+        self.mode = 'test'
 
 
 class MNIST_dataset(data.Dataset):

@@ -119,13 +119,13 @@ class SelfAttention(nn.Module):
     def forward(self, x):
         batch_num, channel, width, height = x.size()
 
-        theta = self.theta(x).view(batch_num, -1, channel)  #K
-        phi = self.phi(x).view(batch_num, -1, channel).permute(0, 2, 1)  #Q
+        theta = self.theta(x).view(batch_num, -1, channel)  # K
+        phi = self.phi(x).view(batch_num, -1, channel).permute(0, 2, 1)  # Q
         g = self.g(x).view(batch_num, -1, channel)
 
         theta_phi = F.softmax(torch.matmul(theta, phi), dim=2)
 
-        t = torch.matmul(self.dropout(theta_phi), g)  #V
+        t = torch.matmul(self.dropout(theta_phi), g)  # V
         t = t.view(batch_num, channel, width, height)
         t = self.conv(t)
         t = self.bn(F.relu(t))
@@ -294,7 +294,6 @@ class DiscriminateLayer(nn.Module):
     def __init__(self,
                  in_size=1,
                  out_channels=2,
-                 attn=True,
                  bn_training=True,
                  dropout_training=True,
                  layers=4,
@@ -308,7 +307,6 @@ class DiscriminateLayer(nn.Module):
         self.features_root = features_root
         self.filter_size = filter_size
         self.pool_size = pool_size
-        self.attn = attn
 
         features = 2**(layers - 1) * features_root
         in_size = in_size // 2**(layers - 1)
@@ -374,7 +372,7 @@ class UDACounting(nn.Module):
                                           features_root, filter_size,
                                           pool_size, dropout, momentum)
 
-        self.discriminate = DiscriminateLayer(in_size, 2, attn, bn_training,
+        self.discriminate = DiscriminateLayer(in_size, 2, bn_training,
                                               dropout_training, layers,
                                               features_root, filter_size,
                                               pool_size, dropout, momentum)
