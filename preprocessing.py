@@ -5,7 +5,7 @@ from config import Constants
 from utils import Model_Logger
 import cv2
 
-logger = Model_Logger('SAM')
+logger = Model_Logger('prepare')
 
 class InitialMasking(Model_Logger):
     def __init__(self, arg, device):

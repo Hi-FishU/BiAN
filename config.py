@@ -49,7 +49,7 @@ class ArgParser(argparse.ArgumentParser):
 
 class Constants:
 
-    ROOT_PATH = '/home/zhuonan/code/PNUDA' # Baseline directory path
+    ROOT_PATH = os.getcwd()  # Baseline directory path
     MODEL_NAME = 'UDA' # Model directory path
 
     DATA_FOLDER = os.path.join(ROOT_PATH, 'data')
